@@ -42,56 +42,89 @@ func requestGao(page int, limit int) (mathcers.RestaurantResponse, error) {
 	return resultjson, err
 }
 
-var wg sync.WaitGroup
-
 //PaginationGet is 分页调用
-func PaginationGet() []mathcers.RestaurantInfo {
-	firstresult, err := requestGao(1, 20)
-	if err != nil {
-		logger.Error.Println(err.Error())
+
+func initProducer(r mathcers.RestaurantResponse) <-chan mathcers.RestaurantInfo {
+	out := make(chan mathcers.RestaurantInfo, 20)
+	go func() {
+		defer close(out)
+		for _, v := range r.Pois {
+			logger.Info.Printf("insert name=%s \n", v.Name)
+			out <- v
+		}
+	}()
+	return out
+}
+
+func getPageProducer(page int, limit int) <-chan mathcers.RestaurantInfo {
+	out := make(chan mathcers.RestaurantInfo, 20)
+	go func() {
+		defer close(out)
+		nextresult, err := requestGao(page, limit)
+		if err != nil {
+			logger.Error.Println(err.Error())
+		}
+		for _, v := range nextresult.Pois {
+			logger.Info.Printf("insert%d name=%s \n", page, v.Name)
+			out <- v
+		}
+	}()
+	return out
+}
+
+func mergeResult(count int, cs ...<-chan mathcers.RestaurantInfo) <-chan mathcers.RestaurantInfo {
+	out := make(chan mathcers.RestaurantInfo, count)
+	var wg sync.WaitGroup
+	collect := func(in <-chan mathcers.RestaurantInfo) {
+		defer wg.Done()
+		for n := range in {
+			out <- n
+		}
 	}
-	count, err := strconv.ParseInt(firstresult.Count, 10, 16)
-	if err != nil {
-		logger.Error.Println(err.Error())
+	wg.Add(len(cs))
+	for _, c := range cs {
+		go collect(c)
 	}
-	resultchan := make(chan mathcers.RestaurantInfo, count)
-	results := make([]mathcers.RestaurantInfo, count)
-	maxpage := int(count) / 20
-	if (int(count) - maxpage*20) > 0 {
-		maxpage++
-	}
+	go func() {
+		wg.Wait()
+		close(out)
+	}()
+	return out
+}
+
+func PaginationGet(maxpage int, count int) []<-chan mathcers.RestaurantInfo {
 	logger.Info.Printf("maxpage:%d,count:%d", maxpage, count)
+	var chanlist []<-chan mathcers.RestaurantInfo
 	if count > 20 {
-		wg.Add(maxpage)
-		logger.Info.Println("wgadd", maxpage)
-		go func() {
-			defer wg.Done()
-			for _, v := range firstresult.Pois {
-				logger.Info.Println("insert", v.Name)
-				resultchan <- v
-			}
-		}()
 		for i := 2; i <= maxpage; i++ {
-			go func(index int) {
-				defer wg.Done()
-				nextresult, err := requestGao(index, 20)
-				if err != nil {
-					logger.Error.Println(err.Error())
-				}
-				for _, v := range nextresult.Pois {
-					logger.Info.Printf("insert%d name=%s \n", index, v.Name)
-					resultchan <- v
-				}
+			func(index int) {
+				o := getPageProducer(index, 20)
+				chanlist = append(chanlist, o)
 			}(i)
 		}
-		wg.Wait()
-		close(resultchan)
-		for i := 1; i <= int(count); i++ {
-			t, ok := <-resultchan
-			if ok {
-				results = append(results, t)
-			}
-		}
 	}
-	return results
+	return chanlist
+}
+
+func GetGaoResult() <-chan mathcers.RestaurantInfo {
+	firstres, err := requestGao(1, 20)
+	if err != nil {
+		logger.Error.Println(err.Error())
+	}
+	c, err := strconv.ParseInt(firstres.Count, 10, 16)
+	count := int(c)
+	if err != nil {
+		logger.Error.Println(err.Error())
+	}
+	maxpage := count / 20
+	if (count - maxpage*20) > 0 {
+		maxpage++
+	}
+	var outlist []<-chan mathcers.RestaurantInfo
+	firstout := initProducer(firstres)
+	outlist = append(outlist, firstout)
+	remainoutlist := PaginationGet(maxpage, count)
+	outlist = append(outlist, remainoutlist...)
+	mergeout := mergeResult(count, outlist...)
+	return mergeout
 }
