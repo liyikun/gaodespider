@@ -21,7 +21,7 @@ var params = map[string]string{
 	"citylimit": "true",
 }
 
-//RequestGao is 请求数据
+//requestGao is 请求数据
 func requestGao(page int, limit int) (mathcers.RestaurantResponse, error) {
 	api, _ := url.Parse("https://restapi.amap.com/v3/place/text")
 	query := api.Query()
@@ -42,8 +42,7 @@ func requestGao(page int, limit int) (mathcers.RestaurantResponse, error) {
 	return resultjson, err
 }
 
-//PaginationGet is 分页调用
-
+//initProducer is 初始化 producer
 func initProducer(r mathcers.RestaurantResponse) <-chan mathcers.RestaurantInfo {
 	out := make(chan mathcers.RestaurantInfo, 20)
 	go func() {
@@ -56,6 +55,7 @@ func initProducer(r mathcers.RestaurantResponse) <-chan mathcers.RestaurantInfo 
 	return out
 }
 
+//getPageProducer is 后续分页掉用 producer
 func getPageProducer(page int, limit int) <-chan mathcers.RestaurantInfo {
 	out := make(chan mathcers.RestaurantInfo, 20)
 	go func() {
@@ -72,6 +72,7 @@ func getPageProducer(page int, limit int) <-chan mathcers.RestaurantInfo {
 	return out
 }
 
+//mergeResult is merge所有chan
 func mergeResult(count int, cs ...<-chan mathcers.RestaurantInfo) <-chan mathcers.RestaurantInfo {
 	out := make(chan mathcers.RestaurantInfo, count)
 	var wg sync.WaitGroup
@@ -92,6 +93,7 @@ func mergeResult(count int, cs ...<-chan mathcers.RestaurantInfo) <-chan mathcer
 	return out
 }
 
+//PaginationGet is 分页get并且把 chan合并到list返回
 func PaginationGet(maxpage int, count int) []<-chan mathcers.RestaurantInfo {
 	logger.Info.Printf("maxpage:%d,count:%d", maxpage, count)
 	var chanlist []<-chan mathcers.RestaurantInfo
@@ -106,6 +108,7 @@ func PaginationGet(maxpage int, count int) []<-chan mathcers.RestaurantInfo {
 	return chanlist
 }
 
+//GetGaoResult is 主函数
 func GetGaoResult() <-chan mathcers.RestaurantInfo {
 	firstres, err := requestGao(1, 20)
 	if err != nil {
