@@ -26,6 +26,14 @@ type RestaurantInfo struct {
 	Photos   []RestaurantImage `json:"photos"`
 }
 
+func (info *RestaurantInfo) TakePhotos() []string {
+	var result []string
+	for _, value := range info.Photos {
+		result = append(result, value.URL)
+	}
+	return result
+}
+
 //RestaurantResponse is 接口POIs
 type RestaurantResponse struct {
 	Pois  []RestaurantInfo `json:"pois"`

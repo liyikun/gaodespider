@@ -3,26 +3,35 @@ package insertdb
 import (
 	"database/sql"
 	"fmt"
+
+	"github.com/lib/pq"
+
+	mathcers "eatinlife.com/gaodespider/matchers"
 )
 
-type ConnParam struct {
-	host     string
-	post     int
-	user     string
-	password string
-	dbname   string
-}
-
-func ConnectDb(c ConnParam) (*sql.DB, error) {
-	connStr := fmt.Sprintf("host=%s port=%d user=%s "+
-		"password=%s dbname=%s sslmode=disable",
-		c.host, c.post, c.user, c.password, c.dbname)
-	db, err := sql.Open("postgres", connStr)
+func InsertRestaurantInfo(info mathcers.RestaurantInfo, db *sql.DB) error {
+	stmt, err := db.Prepare(`insert into Restaurant_Gao
+	(name,types,address,location,tel,pname,cityname,adname,photos)
+	values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+	on conflict (name) do update
+	   set tel=$3,
+	   photos=$9
+	RETURNING id   
+	`)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if err = db.Ping(); err != nil {
-		return nil, err
-	}
-	return db, nil
+	photos := info.TakePhotos()
+	tel := fmt.Sprintf("%v", info.Tel)
+	_, err = stmt.Exec(
+		info.Name,
+		info.Types,
+		info.Address,
+		info.Location,
+		tel,
+		info.Pname,
+		info.Cityname,
+		info.Adname,
+		pq.Array(photos))
+	return err
 }

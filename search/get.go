@@ -73,7 +73,7 @@ func getPageProducer(page int, limit int) <-chan mathcers.RestaurantInfo {
 }
 
 //mergeResult is merge所有chan
-func mergeResult(count int, cs ...<-chan mathcers.RestaurantInfo) <-chan mathcers.RestaurantInfo {
+func mergeResult(count int, cs ...<-chan mathcers.RestaurantInfo) chan mathcers.RestaurantInfo {
 	out := make(chan mathcers.RestaurantInfo, count)
 	var wg sync.WaitGroup
 	collect := func(in <-chan mathcers.RestaurantInfo) {
